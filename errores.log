@@ -1,0 +1,2 @@
+[2026-10-30 17:49:22] ERROR: ValueError - Entrada incorrecta. Detalle: invalid literal for int() with base 10: 'a'
+[2026-10-30 17:50:13] ERROR: ValueError - Entrada incorrecta. Detalle: invalid literal for int() with base 10: 'a'
