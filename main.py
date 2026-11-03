@@ -521,3 +521,10 @@ class Sistema:
 
 
 # =====================================================
+# 8. PUNTO DE ENTRADA
+# =====================================================
+if __name__ == "__main__":
+    app = Sistema()
+    app.ejecutar_simulacion()
+    if "--menu" in sys.argv:
+        app.menu()
