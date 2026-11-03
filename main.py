@@ -150,3 +150,108 @@ class Cliente(Entidad):
 
 
 # =====================================================
+# 5. SERVICIO ABSTRACTO Y TRES HIJAS (polimorfismo)
+# =====================================================
+class Servicio(Entidad):
+    """Clase abstracta: define qué es un servicio, pero no cómo se cobra."""
+    _prefijo = "SRV"
+
+    def __init__(self, nombre, costo_base):
+        self.nombre = nombre
+        self.costo_base = costo_base
+        super().__init__()
+
+    @property
+    def nombre(self):
+        return self.__nombre
+
+    @nombre.setter
+    def nombre(self, valor):
+        if not isinstance(valor, str) or len(valor.strip()) < 3:
+            raise ServicioInvalidoError("El nombre del servicio debe tener mínimo 3 caracteres.")
+        self.__nombre = valor.strip()
+
+    @property
+    def costo_base(self):
+        return self.__costo_base
+
+    @costo_base.setter
+    def costo_base(self, valor):
+        if isinstance(valor, bool) or not isinstance(valor, (int, float)) or valor <= 0:
+            raise ServicioInvalidoError("El costo base debe ser un número mayor que cero.")
+        self.__costo_base = valor
+
+    @staticmethod
+    def _validar_entero(valor, minimo, maximo, campo):
+        if isinstance(valor, bool) or not isinstance(valor, int) or not minimo <= valor <= maximo:
+            raise ServicioInvalidoError(f"{campo} debe ser un entero entre {minimo} y {maximo}.")
+        return valor
+
+    def _aplicar_ajustes(self, subtotal, descuento):
+        """Aplica descuento (0 a 0.5) e IVA. Lo usan todas las hijas."""
+        if isinstance(descuento, bool) or not isinstance(descuento, (int, float)) \
+                or not 0 <= descuento <= 0.5:
+            raise ServicioInvalidoError("El descuento debe estar entre 0 y 0.5 (0% a 50%).")
+        return round(subtotal * (1 - descuento) * (1 + IVA))
+
+    @abstractmethod
+    def calcular_costo(self, descuento=0.0):
+        """Cada hija define su propia fórmula (sobreescritura)."""
+
+    def describir(self):
+        return f"{self.id} | {self.nombre} | Base: {moneda(self.costo_base)} | Costo estándar: {moneda(self.calcular_costo())}"
+
+
+class ReservaSala(Servicio):
+    """Costo base por hora. Salas de más de 10 personas tienen recargo fijo."""
+
+    def __init__(self, nombre, costo_base, capacidad, horas):
+        self.capacidad = self._validar_entero(capacidad, 1, 100, "La capacidad")
+        self.horas = self._validar_entero(horas, 1, 12, "Las horas")
+        super().__init__(nombre, costo_base)
+
+    def calcular_costo(self, descuento=0.0):
+        subtotal = self.costo_base * self.horas
+        if self.capacidad > 10:
+            subtotal += 20000
+        return self._aplicar_ajustes(subtotal, descuento)
+
+
+class AlquilerEquipo(Servicio):
+    """Costo base por día. Cada tipo de equipo tiene un recargo distinto."""
+    RECARGOS = {"Proyector": 15000, "Portátil": 10000, "Sonido": 20000}
+
+    def __init__(self, nombre, costo_base, tipo_equipo, dias):
+        if tipo_equipo not in self.RECARGOS:
+            raise ServicioInvalidoError(
+                f"Tipo de equipo no válido. Opciones: {', '.join(self.RECARGOS)}.")
+        self.tipo_equipo = tipo_equipo
+        self.dias = self._validar_entero(dias, 1, 30, "Los días")
+        super().__init__(nombre, costo_base)
+
+    def calcular_costo(self, descuento=0.0):
+        subtotal = self.costo_base * self.dias + self.RECARGOS[self.tipo_equipo]
+        return self._aplicar_ajustes(subtotal, descuento)
+
+
+class Asesoria(Servicio):
+    """Costo base por hora. El nivel Avanzado cuesta 50% más."""
+
+    def __init__(self, nombre, costo_base, horas, nivel="Básico"):
+        if nivel not in ("Básico", "Avanzado"):
+            raise ServicioInvalidoError("El nivel debe ser 'Básico' o 'Avanzado'.")
+        self.nivel = nivel
+        self.horas = self._validar_entero(horas, 1, 40, "Las horas")
+        super().__init__(nombre, costo_base)
+
+    def calcular_costo(self, descuento=0.0):
+        subtotal = self.costo_base * self.horas
+        if self.nivel == "Avanzado":
+            subtotal *= 1.5
+        return self._aplicar_ajustes(subtotal, descuento)
+
+
+CATALOGO_SERVICIOS = {"sala": ReservaSala, "equipo": AlquilerEquipo, "asesoria": Asesoria}
+
+
+# =====================================================
