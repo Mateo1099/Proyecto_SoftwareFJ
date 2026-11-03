@@ -1,2 +1,12 @@
-[2026-10-30 17:49:22] ERROR: ValueError - Entrada incorrecta. Detalle: invalid literal for int() with base 10: 'a'
-[2026-10-30 17:50:13] ERROR: ValueError - Entrada incorrecta. Detalle: invalid literal for int() with base 10: 'a'
+[2026-11-03 18:41:25] ERROR: registrar_cliente -> ClienteInvalidoError: El documento debe contener solo números.
+[2026-11-03 18:41:25] ERROR: registrar_cliente -> ClienteInvalidoError: El nombre debe tener mínimo 3 letras y no puede incluir números ni símbolos.
+[2026-11-03 18:41:25] ERROR: registrar_cliente -> ClienteInvalidoError: El contacto debe ser un correo válido o un celular de 10 dígitos que empiece en 3.
+[2026-11-03 18:41:25] ERROR: registrar_cliente -> ClienteInvalidoError: Ya existe un cliente con documento 1094123456.
+[2026-11-03 18:41:25] ERROR: crear_servicio -> ServicioInvalidoError: El costo base debe ser un número mayor que cero.
+[2026-11-03 18:41:25] ERROR: crear_servicio -> ServicioInvalidoError: Tipo de servicio desconocido: 'hotel'. | Causa: KeyError: 'hotel'
+[2026-11-03 18:41:25] ERROR: crear_servicio -> ServicioInvalidoError: Faltan o sobran parámetros para este servicio. | Causa: TypeError: AlquilerEquipo.__init__() missing 2 required positional arguments: 'tipo_equipo' and 'dias'
+[2026-11-03 18:41:25] ERROR: crear_reserva -> ClienteInvalidoError: No existe un cliente con documento 9999999.
+[2026-11-03 18:41:25] ERROR: crear_reserva -> ReservaInvalidaError: La fecha debe tener el formato DD/MM/AAAA. | Causa: ValueError: time data '31-12-2026' does not match format '%d/%m/%Y'
+[2026-11-03 18:41:25] ERROR: crear_reserva -> ReservaInvalidaError: No se puede reservar en una fecha pasada.
+[2026-11-03 18:41:25] ERROR: crear_reserva -> ReservaInvalidaError: El servicio seleccionado no existe. | Causa: IndexError: list index out of range
+[2026-11-03 18:41:25] ERROR: crear_reserva -> ReservaInvalidaError: Ese servicio ya está reservado en esa fecha.
