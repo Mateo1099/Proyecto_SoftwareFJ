@@ -255,3 +255,269 @@ CATALOGO_SERVICIOS = {"sala": ReservaSala, "equipo": AlquilerEquipo, "asesoria":
 
 
 # =====================================================
+# 6. RESERVA
+# =====================================================
+class Reserva(Entidad):
+    _prefijo = "RES"
+
+    def __init__(self, cliente, servicio, fecha_txt, descuento=0.0):
+        if not isinstance(cliente, Cliente):
+            raise ReservaInvalidaError("La reserva necesita un cliente válido.")
+        if not isinstance(servicio, Servicio):
+            raise ReservaInvalidaError("La reserva necesita un servicio válido.")
+        fecha = self.parsear_fecha(fecha_txt)
+        self.cliente = cliente
+        self.servicio = servicio
+        self.fecha = fecha
+        self.total = servicio.calcular_costo(descuento)  # polimorfismo
+        self.estado = "Confirmada"
+        super().__init__()
+
+    @staticmethod
+    def parsear_fecha(fecha_txt):
+        try:
+            fecha = datetime.strptime(str(fecha_txt).strip(), "%d/%m/%Y").date()
+        except ValueError as e:
+            # ENCADENAMIENTO: el ValueError original queda como causa
+            raise ReservaInvalidaError("La fecha debe tener el formato DD/MM/AAAA.") from e
+        if fecha < datetime.now().date():
+            raise ReservaInvalidaError("No se puede reservar en una fecha pasada.")
+        return fecha
+
+    def describir(self):
+        return (f"{self.id} | {self.fecha:%d/%m/%Y} | Cliente: {self.cliente.nombre} | "
+                f"{self.servicio.nombre} | Total: {moneda(self.total)} | {self.estado}")
+
+
+# =====================================================
+# 7. SISTEMA (listas en memoria + manejo de excepciones)
+# =====================================================
+class Sistema:
+    def __init__(self):
+        self.__clientes = []
+        self.__servicios = []
+        self.__reservas = []
+        self.__stats = {"exitosas": 0, "fallidas": 0}
+
+    # ---------- utilidades ----------
+    def _fallo(self, contexto, error):
+        """Muestra el error, lo guarda en errores.log y lo cuenta. No detiene el programa."""
+        self.__stats["fallidas"] += 1
+        print(f"   [X] {contexto}: {error}")
+        registrar_error(contexto, error)
+
+    def _exito(self, mensaje):
+        self.__stats["exitosas"] += 1
+        print(f"   [OK] {mensaje}")
+
+    def buscar_cliente(self, documento):
+        for c in self.__clientes:
+            if c.documento == str(documento).strip():
+                return c
+        raise ClienteInvalidoError(f"No existe un cliente con documento {documento}.")
+
+    # ---------- operaciones ----------
+    def registrar_cliente(self, documento, nombre, contacto):
+        cliente = None
+        try:
+            for c in self.__clientes:
+                if c.documento == str(documento).strip():
+                    raise ClienteInvalidoError(f"Ya existe un cliente con documento {documento}.")
+            cliente = Cliente(documento, nombre, contacto)
+        except ErrorSistemaFJ as e:
+            self._fallo("registrar_cliente", e)
+        except Exception as e:  # error inesperado: el sistema sigue vivo
+            self._fallo("registrar_cliente (inesperado)", e)
+        else:  # solo se ejecuta si NO hubo excepción
+            self.__clientes.append(cliente)
+            self._exito(f"Cliente registrado: {cliente.nombre} ({cliente.id})")
+        finally:  # se ejecuta SIEMPRE
+            print("   (operación 'registrar_cliente' finalizada)")
+        return cliente
+
+    def crear_servicio(self, tipo, *parametros):
+        servicio = None
+        try:
+            try:
+                clase = CATALOGO_SERVICIOS[str(tipo).lower()]
+            except KeyError as e:
+                raise ServicioInvalidoError(f"Tipo de servicio desconocido: '{tipo}'.") from e
+            try:
+                servicio = clase(*parametros)
+            except TypeError as e:
+                raise ServicioInvalidoError("Faltan o sobran parámetros para este servicio.") from e
+        except ErrorSistemaFJ as e:
+            self._fallo("crear_servicio", e)
+        except Exception as e:
+            self._fallo("crear_servicio (inesperado)", e)
+        else:
+            self.__servicios.append(servicio)
+            self._exito(f"Servicio creado: {servicio.nombre} ({servicio.id})")
+        finally:
+            print("   (operación 'crear_servicio' finalizada)")
+        return servicio
+
+    def crear_reserva(self, documento, indice_servicio, fecha_txt, descuento=0.0):
+        reserva = None
+        try:
+            cliente = self.buscar_cliente(documento)
+            try:
+                if indice_servicio < 0:
+                    raise IndexError("índice negativo")
+                servicio = self.__servicios[indice_servicio]
+            except IndexError as e:
+                raise ReservaInvalidaError("El servicio seleccionado no existe.") from e
+            fecha = Reserva.parsear_fecha(fecha_txt)
+            for r in self.__reservas:
+                if r.servicio is servicio and r.fecha == fecha:
+                    raise ReservaInvalidaError("Ese servicio ya está reservado en esa fecha.")
+            reserva = Reserva(cliente, servicio, fecha_txt, descuento)
+        except ErrorSistemaFJ as e:
+            reserva = None
+            self._fallo("crear_reserva", e)
+        except Exception as e:
+            reserva = None
+            self._fallo("crear_reserva (inesperado)", e)
+        else:
+            self.__reservas.append(reserva)
+            self._exito(f"Reserva confirmada: {reserva.id} por {moneda(reserva.total)}")
+        finally:
+            print("   (operación 'crear_reserva' finalizada)")
+        return reserva
+
+    # ---------- consultas ----------
+    def listar(self, titulo, elementos):
+        print(f"\n--- {titulo} ({len(elementos)}) ---")
+        if not elementos:
+            print("   (sin registros)")
+        for e in elementos:
+            print("  ", e)
+
+    def mostrar_clientes(self):
+        self.listar("CLIENTES", self.__clientes)
+
+    def mostrar_servicios(self):
+        self.listar("SERVICIOS", self.__servicios)
+
+    def mostrar_reservas(self):
+        self.listar("RESERVAS", self.__reservas)
+
+    def resumen(self):
+        print("\n=== RESUMEN ===")
+        print(f"Clientes: {len(self.__clientes)} | Servicios: {len(self.__servicios)} | "
+              f"Reservas: {len(self.__reservas)}")
+        print(f"Operaciones exitosas: {self.__stats['exitosas']} | "
+              f"Operaciones fallidas (registradas en errores.log): {self.__stats['fallidas']}")
+
+    # ---------- simulación automática ----------
+    def ejecutar_simulacion(self):
+        hoy = datetime.now()
+        f1 = (hoy + timedelta(days=5)).strftime("%d/%m/%Y")
+        f2 = (hoy + timedelta(days=6)).strftime("%d/%m/%Y")
+        f3 = (hoy + timedelta(days=7)).strftime("%d/%m/%Y")
+        ayer = (hoy - timedelta(days=1)).strftime("%d/%m/%Y")
+
+        pasos = [
+            ("1. Cliente válido (celular)", self.registrar_cliente, ("1094123456", "Ana María Gómez", "3105551234")),
+            ("2. Cliente válido (correo)", self.registrar_cliente, ("1088765432", "Carlos Ruiz", "carlos@correo.com")),
+            ("3. Cliente con documento inválido", self.registrar_cliente, ("ABC123", "Pedro Pérez", "3115559876")),
+            ("4. Cliente con nombre inválido", self.registrar_cliente, ("1098111222", "J0hn 123", "3115559876")),
+            ("5. Cliente con contacto inválido", self.registrar_cliente, ("1098333444", "Laura Díaz", "12345")),
+            ("6. Cliente duplicado", self.registrar_cliente, ("1094123456", "Ana María Gómez", "3105551234")),
+            ("7. Servicio sala válido", self.crear_servicio, ("sala", "Sala de Juntas", 50000, 15, 3)),
+            ("8. Servicio equipo válido", self.crear_servicio, ("equipo", "Proyector Epson", 30000, "Proyector", 2)),
+            ("9. Servicio asesoría válido", self.crear_servicio, ("asesoria", "Asesoría de Software", 40000, 4, "Avanzado")),
+            ("10. Servicio con costo negativo", self.crear_servicio, ("sala", "Sala Pequeña", -5000, 5, 2)),
+            ("11. Servicio de tipo desconocido", self.crear_servicio, ("hotel", "Suite", 100000)),
+            ("12. Servicio con parámetros incompletos", self.crear_servicio, ("equipo", "Portátil HP", 20000)),
+            ("13. Reserva exitosa", self.crear_reserva, ("1094123456", 0, f1)),
+            ("14. Reserva exitosa con descuento", self.crear_reserva, ("1088765432", 2, f2, 0.10)),
+            ("15. Reserva con cliente inexistente", self.crear_reserva, ("9999999", 0, f3)),
+            ("16. Reserva con fecha mal escrita", self.crear_reserva, ("1094123456", 1, "31-12-2026")),
+            ("17. Reserva con fecha pasada", self.crear_reserva, ("1094123456", 1, ayer)),
+            ("18. Reserva con servicio inexistente", self.crear_reserva, ("1094123456", 9, f3)),
+            ("19. Reserva duplicada (mismo servicio y fecha)", self.crear_reserva, ("1088765432", 0, f1)),
+            ("20. Reserva exitosa de equipo", self.crear_reserva, ("1088765432", 1, f3)),
+        ]
+
+        print("=" * 60)
+        print(" SIMULACIÓN AUTOMÁTICA - SISTEMA DE GESTIÓN SOFTWARE FJ")
+        print("=" * 60)
+        for titulo, funcion, argumentos in pasos:
+            print(f"\n>> {titulo}")
+            funcion(*argumentos)  # cada operación maneja sus propios errores
+
+        self.mostrar_clientes()
+        self.mostrar_servicios()
+        self.mostrar_reservas()
+        self.resumen()
+
+    # ---------- menú interactivo ----------
+    def menu(self):
+        opciones = """
+--- SISTEMA DE GESTIÓN SOFTWARE FJ ---
+1. Registrar cliente
+2. Crear servicio
+3. Crear reserva
+4. Ver clientes
+5. Ver servicios
+6. Ver reservas
+7. Salir"""
+        while True:
+            print(opciones)
+            try:
+                opcion = int(input("Seleccione una opción: "))
+                if opcion == 1:
+                    self.registrar_cliente(input("Documento: "), input("Nombre completo: "),
+                                           input("Contacto (celular o correo): "))
+                elif opcion == 2:
+                    self._menu_servicio()
+                elif opcion == 3:
+                    self.mostrar_servicios()
+                    doc = input("Documento del cliente: ")
+                    indice = int(input("Número del servicio: ")) - 1
+                    fecha = input("Fecha (DD/MM/AAAA): ")
+                    self.crear_reserva(doc, indice, fecha)
+                elif opcion == 4:
+                    self.mostrar_clientes()
+                elif opcion == 5:
+                    self.mostrar_servicios()
+                elif opcion == 6:
+                    self.mostrar_reservas()
+                elif opcion == 7:
+                    print("Saliendo del sistema...")
+                    break
+                else:
+                    print("-> Opción no válida. Ingrese un número del 1 al 7.")
+            except ValueError as e:
+                print("-> Debe ingresar un número válido.")
+                registrar_error("menu", e)
+            except (EOFError, KeyboardInterrupt):
+                print("\nSaliendo del sistema...")
+                break
+            except Exception as e:
+                print("-> Ocurrió un error inesperado. El sistema continúa.")
+                registrar_error("menu (inesperado)", e)
+
+    def _menu_servicio(self):
+        print("Tipos: sala | equipo | asesoria")
+        tipo = input("Tipo de servicio: ").strip().lower()
+        nombre = input("Nombre del servicio: ")
+        try:
+            costo = float(input("Costo base: "))
+            if tipo == "sala":
+                params = (nombre, costo, int(input("Capacidad: ")), int(input("Horas: ")))
+            elif tipo == "equipo":
+                params = (nombre, costo, input("Tipo (Proyector/Portátil/Sonido): "), int(input("Días: ")))
+            elif tipo == "asesoria":
+                params = (nombre, costo, int(input("Horas: ")), input("Nivel (Básico/Avanzado): "))
+            else:
+                params = (nombre, costo)
+        except ValueError as e:
+            print("-> Dato numérico no válido.")
+            registrar_error("menu_servicio", e)
+            return
+        self.crear_servicio(tipo, *params)
+
+
+# =====================================================
